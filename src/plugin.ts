@@ -20,7 +20,7 @@ const DEFAULT_PROVIDER_ENABLED: Record<string, boolean> = {
   openai: false,
 }
 const DEFAULT_POLICY = true
-const CONFIG_PATH = '~/.config/opencode/image-optimizer.json'
+const CONFIG_FILENAME = 'large-image-optimizer.json'
 
 interface PluginConfig {
   providers?: Record<string, boolean>
@@ -29,21 +29,32 @@ interface PluginConfig {
 
 let userConfig: PluginConfig | null = null
 
-function resolveHome(p: string): string {
-  if (p.startsWith('~/')) return require('node:path').join(require('node:os').homedir(), p.slice(2))
-  return p
+function getConfigDir(): string {
+  const path = require('node:path') as typeof import('node:path')
+  const os = require('node:os') as typeof import('node:os')
+  if (process.env.XDG_CONFIG_HOME) return path.join(process.env.XDG_CONFIG_HOME, 'opencode')
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'opencode')
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'opencode')
+  return path.join(os.homedir(), '.config', 'opencode')
 }
 
 function loadConfig(): PluginConfig {
   if (userConfig) return userConfig
-  try {
-    const fs = require('node:fs') as typeof import('node:fs')
-    const raw = fs.readFileSync(resolveHome(CONFIG_PATH), 'utf-8')
-    userConfig = JSON.parse(raw) as PluginConfig
-    log('config loaded', userConfig)
-  } catch {
-    userConfig = {}
+  const path = require('node:path') as typeof import('node:path')
+  const candidates = [
+    path.join(getConfigDir(), CONFIG_FILENAME),
+    path.join(require('node:os').homedir(), '.config', 'opencode', CONFIG_FILENAME),
+  ]
+  const fs = require('node:fs') as typeof import('node:fs')
+  for (const p of candidates) {
+    try {
+      const raw = fs.readFileSync(p, 'utf-8')
+      userConfig = JSON.parse(raw) as PluginConfig
+      log('config loaded', { path: p, ...userConfig })
+      return userConfig
+    } catch {}
   }
+  userConfig = {}
   return userConfig
 }
 

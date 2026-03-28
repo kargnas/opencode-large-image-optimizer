@@ -52,7 +52,15 @@ Add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
 
 ## Configuration
 
-Create `~/.config/opencode/image-optimizer.json` to customize provider settings:
+Create `large-image-optimizer.json` in your OpenCode config directory to customize provider settings:
+
+| Platform | Path |
+|---|---|
+| macOS | `~/Library/Application Support/opencode/large-image-optimizer.json` |
+| Linux | `~/.config/opencode/large-image-optimizer.json` |
+| Windows | `%APPDATA%/opencode/large-image-optimizer.json` |
+
+If `XDG_CONFIG_HOME` is set, `$XDG_CONFIG_HOME/opencode/large-image-optimizer.json` is used instead.
 
 ```json
 {
