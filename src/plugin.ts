@@ -14,19 +14,48 @@ const MAX_DIMENSION = 8000
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const SUPPORTED_MIMES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'])
 
-const PROVIDER_ENABLED: Record<string, boolean> = {
+const DEFAULT_PROVIDER_ENABLED: Record<string, boolean> = {
   anthropic: true,
   google: true,
   openai: false,
 }
 const DEFAULT_POLICY = true
+const CONFIG_PATH = '~/.config/opencode/image-optimizer.json'
+
+interface PluginConfig {
+  providers?: Record<string, boolean>
+  defaultPolicy?: boolean
+}
+
+let userConfig: PluginConfig | null = null
+
+function resolveHome(p: string): string {
+  if (p.startsWith('~/')) return require('node:path').join(require('node:os').homedir(), p.slice(2))
+  return p
+}
+
+function loadConfig(): PluginConfig {
+  if (userConfig) return userConfig
+  try {
+    const fs = require('node:fs') as typeof import('node:fs')
+    const raw = fs.readFileSync(resolveHome(CONFIG_PATH), 'utf-8')
+    userConfig = JSON.parse(raw) as PluginConfig
+    log('config loaded', userConfig)
+  } catch {
+    userConfig = {}
+  }
+  return userConfig
+}
 
 const sessionProviders = new Map<string, string>()
 
 function shouldOptimize(sessionID: string): boolean {
+  const config = loadConfig()
+  const providers = { ...DEFAULT_PROVIDER_ENABLED, ...config.providers }
+  const fallback = config.defaultPolicy ?? DEFAULT_POLICY
   const provider = sessionProviders.get(sessionID)
-  if (!provider) return DEFAULT_POLICY
-  return PROVIDER_ENABLED[provider] ?? DEFAULT_POLICY
+  if (!provider) return fallback
+  return providers[provider] ?? fallback
 }
 
 let _sharpFactory: ((input?: Buffer) => any) | null = null

@@ -1,6 +1,6 @@
 {
   "name": "opencode-large-image-optimizer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OpenCode plugin that automatically crops and compresses oversized images to prevent API errors and context window bloat",
   "main": "dist/plugin.js",
   "types": "dist/plugin.d.ts",

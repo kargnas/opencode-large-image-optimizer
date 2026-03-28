@@ -30,13 +30,13 @@ This plugin prevents these failures automatically by optimizing images before th
 
 ### Related Issues
 
-- [Oversized image breaks conversation permanently - no way to recover](https://github.com/anthropics/claude-code/issues/13480)
-- [Image base64 size (8.4 MB) exceeds API limit (5.0 MB)](https://github.com/anthropics/claude-code/issues/20021)
-- [Image base64 size error persists](https://github.com/anthropics/claude-code/issues/19701)
-- [API Error 413: request_too_large kills the active session](https://github.com/anthropics/claude-code/issues/8092)
-- [Image Upload Exceeds Size Limit Causing Persistent API Request Failure](https://github.com/anthropics/claude-code/issues/2939)
-- [Read tool loops indefinitely on large Playwright screenshots](https://github.com/anthropics/claude-code/issues/27611)
-- [Anthropic API Error: Image Upload Size Blocking All Message Attempts](https://github.com/anthropics/claude-code/issues/8039)
+- [Images exceeding 2000px are rejected by Anthropic API](https://github.com/anomalyco/opencode/issues/12068)
+- [request_too_large: Request exceeds the maximum size // exceded pixels image](https://github.com/anomalyco/opencode/issues/13865)
+- [413 Payload Too Large when reading local image](https://github.com/anomalyco/opencode/issues/12060)
+- [Request Entity Too Large with images blocks session — compaction also fails](https://github.com/anomalyco/opencode/issues/14562)
+- [Screenshots from Chrome DevTools MCP are larger than context window](https://github.com/anomalyco/opencode/issues/10306)
+- [Request Entity Too Large not caught before trying to read large files](https://github.com/anomalyco/opencode/issues/8956)
+- [impossible to recover from 'image exceeds 5mb' error](https://github.com/anomalyco/opencode/issues/7235)
 
 ## Installation
 
@@ -52,23 +52,23 @@ Add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
 
 ## Configuration
 
-The plugin includes a provider policy map in `src/plugin.ts`:
+Create `~/.config/opencode/image-optimizer.json` to customize provider settings:
 
-```ts
-const PROVIDER_ENABLED: Record<string, boolean> = {
-  anthropic: true,
-  google: true,
-  openai: false,
+```json
+{
+  "providers": {
+    "anthropic": true,
+    "google": true,
+    "openai": false
+  },
+  "defaultPolicy": true
 }
-const DEFAULT_POLICY = true
 ```
 
-Meaning:
+- `providers`: per-provider toggle (`true` = optimize, `false` = skip)
+- `defaultPolicy`: fallback for unlisted providers (default: `true`)
 
-- `anthropic`: optimization enabled
-- `google`: optimization enabled
-- `openai`: optimization disabled
-- unknown provider: follows `DEFAULT_POLICY` (`true`)
+Without this file, defaults apply: Anthropic/Google enabled, OpenAI disabled.
 
 ## How it works
 
