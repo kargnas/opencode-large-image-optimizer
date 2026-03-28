@@ -17,17 +17,23 @@ If you use screenshots, pasted images, or `read` attachments in OpenCode, you ma
 - `Error: Base64 encoded image exceeds maximum payload size`
 - `Error: context_length_exceeded - This request would exceed your context window`
 
-This plugin addresses these scenarios automatically during OpenCode message and tool flows.
+These errors kill your active session with no way to recover — you're forced to start a new conversation and lose all context.
+
+This plugin prevents these failures automatically by optimizing images before they reach the API.
+
+### Related Issues
+
+- [Oversized image breaks conversation permanently - no way to recover](https://github.com/anthropics/claude-code/issues/13480)
+- [Image base64 size (8.4 MB) exceeds API limit (5.0 MB)](https://github.com/anthropics/claude-code/issues/20021)
+- [Image base64 size error persists](https://github.com/anthropics/claude-code/issues/19701)
+- [API Error 413: request_too_large kills the active session](https://github.com/anthropics/claude-code/issues/8092)
+- [Image Upload Exceeds Size Limit Causing Persistent API Request Failure](https://github.com/anthropics/claude-code/issues/2939)
+- [Read tool loops indefinitely on large Playwright screenshots](https://github.com/anthropics/claude-code/issues/27611)
+- [Anthropic API Error: Image Upload Size Blocking All Message Attempts](https://github.com/anthropics/claude-code/issues/8039)
 
 ## Installation
 
-Install package:
-
-```bash
-npm install opencode-large-image-optimizer
-```
-
-Then add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
+Add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
 
 ```json
 {
