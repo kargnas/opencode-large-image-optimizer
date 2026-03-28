@@ -8,14 +8,21 @@ It prevents common image-related failures by cropping images over 8000px and con
 
 If you use screenshots, pasted images, or `read` attachments in OpenCode, you may hit errors like:
 
-- `Error: Image exceeds maximum dimensions of 8000x8000 pixels`
-- `Error: Request too large - The maximum request size is 32 MB`
-- `Error: Could not process image`
-- `Error: invalid_request_error - image exceeds size limit`
-- `Error: request_too_large`
-- `Error: Image too large to fit in context window`
-- `Error: Base64 encoded image exceeds maximum payload size`
-- `Error: context_length_exceeded - This request would exceed your context window`
+```
+Image base64 size (8.4 MB) exceeds API limit (5.0 MB). Please resize the image before sending.
+```
+```
+API Error: 413 {"error":{"type":"request_too_large","message":"Request exceeds the maximum size"}}
+```
+```
+messages.X.content.0.image.source.base64.data: At least one of the image dimensions exceed max allowed size for many-image requests: 2000 pixels
+```
+```
+Image was too large. Double press esc to go back and try again with a smaller image.
+```
+```
+invalid_request_error: At least one of the image dimensions exceed max allowed size for many-image requests: 2000 pixels
+```
 
 These errors kill your active session with no way to recover — you're forced to start a new conversation and lose all context.
 
