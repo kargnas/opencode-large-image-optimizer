@@ -6,6 +6,11 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -15,6 +20,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Wait 10 minutes for more commits
+        run: sleep 600
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
