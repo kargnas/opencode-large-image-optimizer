@@ -45,7 +45,7 @@ Add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
 ```json
 {
   "plugin": [
-    "opencode-large-image-optimizer"
+    "opencode-large-image-optimizer@latest"
   ]
 }
 ```
