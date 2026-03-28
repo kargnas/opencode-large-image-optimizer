@@ -1,0 +1,5 @@
+{
+  "name": "opencode-large-image-optimizer",
+  "version": "1.0.0",
+  "description": "Automatically crops and compresses oversized images to prevent API errors"
+}

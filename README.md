@@ -1,0 +1,92 @@
+# opencode-large-image-optimizer
+
+OpenCode plugin that automatically optimizes oversized images before they hit model APIs.
+
+It prevents common image-related failures by cropping images over 8000px and converting very large files to JPEG, reducing request payload size and context window pressure.
+
+## Problem (Errors this plugin solves)
+
+If you use screenshots, pasted images, or `read` attachments in OpenCode, you may hit errors like:
+
+- `Error: Image exceeds maximum dimensions of 8000x8000 pixels`
+- `Error: Request too large - The maximum request size is 32 MB`
+- `Error: Could not process image`
+- `Error: invalid_request_error - image exceeds size limit`
+- `Error: request_too_large`
+- `Error: Image too large to fit in context window`
+- `Error: Base64 encoded image exceeds maximum payload size`
+- `Error: context_length_exceeded - This request would exceed your context window`
+
+This plugin addresses these scenarios automatically during OpenCode message and tool flows.
+
+## Installation
+
+Install package:
+
+```bash
+npm install opencode-large-image-optimizer
+```
+
+Then add `"opencode-large-image-optimizer"` to your plugin array in `opencode.json`:
+
+```json
+{
+  "plugin": [
+    "opencode-large-image-optimizer"
+  ]
+}
+```
+
+## Configuration
+
+The plugin includes a provider policy map in `src/plugin.ts`:
+
+```ts
+const PROVIDER_ENABLED: Record<string, boolean> = {
+  anthropic: true,
+  google: true,
+  openai: false,
+}
+const DEFAULT_POLICY = true
+```
+
+Meaning:
+
+- `anthropic`: optimization enabled
+- `google`: optimization enabled
+- `openai`: optimization disabled
+- unknown provider: follows `DEFAULT_POLICY` (`true`)
+
+## How it works
+
+The optimizer applies the following 4 rules (in order):
+
+1. **Normal dimensions** → pass through unchanged.
+2. **Normal width + height > 8000px** → crop height from top to `8000px`.
+3. **Width > 8000px** → crop width from horizontal center to `8000px`.
+4. **File size > 5MB** → convert to JPEG (`quality=100`) and progressively reduce quality (`95`, `90`, `80`, `70`) if still above size limit.
+
+Supported MIME types:
+
+- `image/png`
+- `image/jpeg`
+- `image/jpg`
+- `image/gif`
+- `image/webp`
+
+## Scope
+
+Optimization is applied to:
+
+- `read` tool image attachments
+- screenshot tool outputs carrying base64 image payloads
+- chat message `file` parts via `experimental.chat.messages.transform`
+
+## Notes
+
+- This package expects `sharp` to be available as a peer dependency.
+- Build output is generated into `dist/`.
+
+## License
+
+MIT
