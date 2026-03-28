@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait 10 minutes for more commits
+        if: github.event_name == 'push'
         run: sleep 600
 
       - uses: actions/checkout@v6
@@ -51,10 +52,21 @@ jobs:
         if: steps.version.outputs.changed == 'true'
         run: npm publish --access public
 
-      - name: Tag release
+      - name: Tag and GitHub Release
         if: steps.version.outputs.changed == 'true'
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git tag "v${{ steps.version.outputs.local }}"
           git push origin "v${{ steps.version.outputs.local }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          gh release create "v${{ steps.version.outputs.local }}" \
+            --title "v${{ steps.version.outputs.local }}" \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
