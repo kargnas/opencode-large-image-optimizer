@@ -1,4 +1,7 @@
 import type { Plugin } from '@opencode-ai/plugin'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import * as os from 'node:os'
 
 /**
  * Image Optimizer Plugin
@@ -30,8 +33,6 @@ interface PluginConfig {
 let userConfig: PluginConfig | null = null
 
 function getConfigDir(): string {
-  const path = require('node:path') as typeof import('node:path')
-  const os = require('node:os') as typeof import('node:os')
   if (process.env.XDG_CONFIG_HOME) return path.join(process.env.XDG_CONFIG_HOME, 'opencode')
   if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'opencode')
   if (process.platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'opencode')
@@ -40,12 +41,10 @@ function getConfigDir(): string {
 
 function loadConfig(): PluginConfig {
   if (userConfig) return userConfig
-  const path = require('node:path') as typeof import('node:path')
   const candidates = [
     path.join(getConfigDir(), CONFIG_FILENAME),
-    path.join(require('node:os').homedir(), '.config', 'opencode', CONFIG_FILENAME),
+    path.join(os.homedir(), '.config', 'opencode', CONFIG_FILENAME),
   ]
-  const fs = require('node:fs') as typeof import('node:fs')
   for (const p of candidates) {
     try {
       const raw = fs.readFileSync(p, 'utf-8')
@@ -70,18 +69,32 @@ function shouldOptimize(sessionID: string): boolean {
 }
 
 let _sharpFactory: ((input?: Buffer) => any) | null = null
+let _sharpWarned = false
 async function getSharp(): Promise<((input?: Buffer) => any) | null> {
   if (_sharpFactory) return _sharpFactory
   try {
     const mod = await import('sharp')
     const fn = typeof mod === 'function' ? mod : (mod as any).default
     if (typeof fn === 'function') { _sharpFactory = fn; return fn }
-  } catch {}
+  } catch (err) {
+    if (!_sharpWarned) {
+      _sharpWarned = true
+      // eslint-disable-next-line no-console
+      console.error('[image-optimizer] sharp not installed — plugin disabled. Install with: npm i -g sharp')
+      log('sharp import failed', { error: err instanceof Error ? err.message : String(err) })
+    }
+    return null
+  }
+  if (!_sharpWarned) {
+    _sharpWarned = true
+    // eslint-disable-next-line no-console
+    console.error('[image-optimizer] sharp resolved but did not export a function — plugin disabled.')
+    log('sharp shape unexpected')
+  }
   return null
 }
 
 function log(msg: string, data?: any) {
-  const fs = require('node:fs') as typeof import('node:fs')
   const line = `[${new Date().toISOString()}] [image-optimizer] ${msg}${data ? ' ' + JSON.stringify(data) : ''}\n`
   try { fs.appendFileSync('/tmp/opencode-image-optimizer.log', line) } catch {}
 }
