@@ -121,9 +121,6 @@ function buildDataUrl(mime: string, base64: string): string {
   return `data:${mime};base64,${base64}`
 }
 
-// Dimension parsers kept for potential future use in pre-checks, but the main
-// optimization path now relies on sharp's metadata() for accurate dimensions.
-
 interface OptimizeResult {
   dataUrl: string
   mime: string
