@@ -2,7 +2,7 @@
 
 OpenCode plugin that automatically optimizes oversized images before they hit model APIs.
 
-It prevents common image-related failures by cropping images over 8000px and converting very large files to JPEG, reducing request payload size and context window pressure.
+It prevents common image-related failures by resampling images larger than 1568px (Anthropic's internal downscale target) and converting very large files to JPEG, reducing request payload size and context window pressure without losing any model-visible information.
 
 ## Problem (Errors this plugin solves)
 
@@ -80,12 +80,13 @@ Without this file, defaults apply: Anthropic/Google enabled, OpenAI disabled.
 
 ## How it works
 
-The optimizer applies the following 4 rules (in order):
+The optimizer applies the following rules (in order):
 
-1. **Normal dimensions** → pass through unchanged.
-2. **Normal width + height > 8000px** → crop height from top to `8000px`.
-3. **Width > 8000px** → crop width from horizontal center to `8000px`.
-4. **File size > 5MB** → convert to JPEG (`quality=100`) and progressively reduce quality (`95`, `90`, `80`, `70`) if still above size limit.
+1. **Within budget** (longest edge ≤ 1568px AND raw size ≤ 3.75MB) → pass through unchanged.
+2. **Any dimension > 1568px** → resample to fit inside a 1568px bounding box (aspect ratio preserved, no crop — the full frame is kept). 1568px is Anthropic's internal downscale target, so no model-visible information is lost.
+3. **Raw size > 3.75MB after resample** → convert to JPEG with progressive quality reduction (`90`, `80`, `70`, `60`) until under budget.
+
+The raw threshold is 3,932,160 bytes (not 5MB) because the API measures the base64 encoding, which inflates by 4/3. A 5MB raw file becomes ~6.7MB base64, exceeding the 5MB API limit.
 
 Supported MIME types:
 

@@ -1,7 +1,7 @@
 {
   "name": "opencode-large-image-optimizer",
-  "version": "1.1.0",
-  "description": "OpenCode plugin that automatically crops and compresses oversized images to prevent API errors and context window bloat",
+  "version": "1.2.0",
+  "description": "OpenCode plugin that automatically resamples and compresses oversized images to prevent API errors and context window bloat",
   "main": "dist/plugin.js",
   "types": "dist/plugin.d.ts",
   "files": [
@@ -19,7 +19,7 @@
     "image",
     "optimizer",
     "resize",
-    "crop",
+    "resample",
     "anthropic",
     "claude",
     "context-window",

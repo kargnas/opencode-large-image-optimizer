@@ -7,14 +7,25 @@ import * as os from 'node:os'
  * Image Optimizer Plugin
  *
  * Rules (applied in order):
- * 1. Normal dimensions → pass through
- * 2. Normal width + height > 8000px → crop from top to 8000px
- * 3. Width > 8000px → crop from horizontal center to 8000px
- * 4. File size > 5MB → convert to JPEG (quality=100, progressive reduction if still over)
+ * 1. Both dimensions ≤ MAX_EDGE and raw size ≤ MAX_RAW_BYTES → pass through
+ * 2. Any dimension > MAX_EDGE → resample (fit inside MAX_EDGE box, preserving aspect ratio)
+ * 3. Raw size > MAX_RAW_BYTES after resample → convert to JPEG with progressive quality reduction
+ *
+ * Why resample instead of crop:
+ *   Crop discards parts of the image the model might need to see (e.g. bottom of a screenshot).
+ *   Anthropic already downscales to 1568px long edge internally, so resample to 1568 loses no
+ *   information that the model would have used anyway.
+ *
+ * Why 3,932,160 bytes instead of 5MB:
+ *   The API limit is 5MB measured in base64. base64 inflates by 4/3, so the raw byte budget is
+ *   floor(5 * 1024 * 1024 * 3 / 4) = 3,932,160. The old 5MB raw threshold had a 1.25MB blind
+ *   spot where files passed the plugin but were rejected by the API.
  */
 
-const MAX_DIMENSION = 8000
-const MAX_FILE_SIZE = 5 * 1024 * 1024
+// Anthropic downscales to 1568px long edge internally — resample to this loses zero model info
+const MAX_EDGE = 1568
+// API limit is 5MB base64 → raw budget = floor(5*1024*1024 * 3/4)
+const MAX_RAW_BYTES = Math.floor(5 * 1024 * 1024 * 3 / 4) // 3,932,160
 const SUPPORTED_MIMES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'])
 
 const DEFAULT_PROVIDER_ENABLED: Record<string, boolean> = {
@@ -110,47 +121,8 @@ function buildDataUrl(mime: string, base64: string): string {
   return `data:${mime};base64,${base64}`
 }
 
-// PNG: width at byte 16, height at byte 20 (4 bytes big-endian each)
-function parsePngDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.length < 24 || buf[0] !== 0x89 || buf[1] !== 0x50) return null
-  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
-}
-
-// JPEG: scan for SOF0-SOF3 markers (0xFFC0-0xFFC3) which contain dimensions
-function parseJpegDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null
-  let offset = 2
-  while (offset < buf.length - 8) {
-    if (buf[offset] !== 0xff) break
-    const marker = buf[offset + 1]
-    if (marker >= 0xc0 && marker <= 0xc3) {
-      return { width: buf.readUInt16BE(offset + 7), height: buf.readUInt16BE(offset + 5) }
-    }
-    offset += 2 + buf.readUInt16BE(offset + 2)
-  }
-  return null
-}
-
-// GIF: width/height at bytes 6-9 (little-endian 16-bit each)
-function parseGifDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.length < 10 || buf[0] !== 0x47 || buf[1] !== 0x49 || buf[2] !== 0x46) return null
-  return { width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) }
-}
-
-// WebP: VP8 lossy dims at bytes 26-29, VP8L lossless encoded at byte 21
-function parseWebpDimensions(buf: Buffer): { width: number; height: number } | null {
-  if (buf.length < 30) return null
-  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WEBP') return null
-  const fmt = buf.toString('ascii', 12, 16)
-  if (fmt === 'VP8 ' && buf.length >= 30) {
-    return { width: buf.readUInt16LE(26) & 0x3fff, height: buf.readUInt16LE(28) & 0x3fff }
-  }
-  if (fmt === 'VP8L' && buf.length >= 25) {
-    const bits = buf.readUInt32LE(21)
-    return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 }
-  }
-  return null
-}
+// Dimension parsers kept for potential future use in pre-checks, but the main
+// optimization path now relies on sharp's metadata() for accurate dimensions.
 
 interface OptimizeResult {
   dataUrl: string
@@ -176,48 +148,30 @@ async function optimizeImage(dataUrl: string, mime: string): Promise<OptimizeRes
   if (origWidth === 0 || origHeight === 0) return null
 
   const origBytes = inputBuffer.length
+  const maxDim = Math.max(origWidth, origHeight)
+
+  // Pass through if already within both dimension and size budgets
+  if (maxDim <= MAX_EDGE && origBytes <= MAX_RAW_BYTES) return null
+
   const actions: string[] = []
-  let pipeline = sharp(inputBuffer)
-  let currentWidth = origWidth
-  let currentHeight = origHeight
   let outputMime = mime
 
-  // Rule 2: height > 8000 with normal width → crop from top
-  if (currentHeight > MAX_DIMENSION && currentWidth <= MAX_DIMENSION) {
-    pipeline = pipeline.extract({ left: 0, top: 0, width: currentWidth, height: MAX_DIMENSION })
-    actions.push(`height crop: ${currentHeight}px → ${MAX_DIMENSION}px (top)`)
-    currentHeight = MAX_DIMENSION
-  }
-
-  // Rule 3: width > 8000 → crop from horizontal center
-  if (currentWidth > MAX_DIMENSION) {
-    const leftOffset = Math.floor((currentWidth - MAX_DIMENSION) / 2)
-    pipeline = pipeline.extract({ left: leftOffset, top: 0, width: MAX_DIMENSION, height: currentHeight })
-    actions.push(`width crop: ${currentWidth}px → ${MAX_DIMENSION}px (center, offset=${leftOffset})`)
-    currentWidth = MAX_DIMENSION
-  }
-
-  // Edge case: both dimensions exceeded, height still over after width crop
-  if (currentHeight > MAX_DIMENSION) {
-    pipeline = pipeline.extract({ left: 0, top: 0, width: currentWidth, height: MAX_DIMENSION })
-    actions.push(`height crop: ${currentHeight}px → ${MAX_DIMENSION}px (top, post-width-crop)`)
-    currentHeight = MAX_DIMENSION
+  // Step 1: Resample if any dimension exceeds target (fit inside MAX_EDGE box)
+  let pipeline = sharp(inputBuffer)
+  if (maxDim > MAX_EDGE) {
+    pipeline = pipeline.resize(MAX_EDGE, MAX_EDGE, { fit: 'inside', withoutEnlargement: true })
+    actions.push(`resample: ${origWidth}x${origHeight} → fit ${MAX_EDGE}px (aspect preserved)`)
   }
 
   let outputBuffer = await pipeline.toBuffer()
 
-  // Rule 4: > 5MB → JPEG max quality, progressive reduction if needed
-  if (outputBuffer.length > MAX_FILE_SIZE) {
-    outputBuffer = await sharp(outputBuffer).jpeg({ quality: 100, mozjpeg: true }).toBuffer()
-    outputMime = 'image/jpeg'
-    actions.push(`jpeg convert: ${formatBytes(origBytes)} → ${formatBytes(outputBuffer.length)}`)
-
-    if (outputBuffer.length > MAX_FILE_SIZE) {
-      for (const q of [95, 90, 80, 70]) {
-        outputBuffer = await sharp(outputBuffer).jpeg({ quality: q, mozjpeg: true }).toBuffer()
-        actions.push(`jpeg q=${q}: ${formatBytes(outputBuffer.length)}`)
-        if (outputBuffer.length <= MAX_FILE_SIZE) break
-      }
+  // Step 2: If still over raw budget, convert to JPEG with progressive quality reduction
+  if (outputBuffer.length > MAX_RAW_BYTES) {
+    for (const q of [90, 80, 70, 60]) {
+      outputBuffer = await sharp(outputBuffer).jpeg({ quality: q, mozjpeg: true }).toBuffer()
+      outputMime = 'image/jpeg'
+      actions.push(`jpeg q=${q}: ${formatBytes(outputBuffer.length)}`)
+      if (outputBuffer.length <= MAX_RAW_BYTES) break
     }
   }
 
@@ -228,7 +182,7 @@ async function optimizeImage(dataUrl: string, mime: string): Promise<OptimizeRes
     dataUrl: buildDataUrl(outputMime, outputBuffer.toString('base64')),
     mime: outputMime,
     original: { width: origWidth, height: origHeight, bytes: origBytes },
-    final: { width: finalMeta.width || currentWidth, height: finalMeta.height || currentHeight, bytes: outputBuffer.length },
+    final: { width: finalMeta.width || 0, height: finalMeta.height || 0, bytes: outputBuffer.length },
     actions,
   }
 }
