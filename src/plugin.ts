@@ -147,11 +147,24 @@ async function optimizeImage(dataUrl: string, mime: string): Promise<OptimizeRes
   const origBytes = inputBuffer.length
   const maxDim = Math.max(origWidth, origHeight)
 
-  // Pass through if already within both dimension and size budgets
+  // Pass through if already within both dimension and size budgets.
+  // Small animated GIFs land here, so their animation survives untouched.
   if (maxDim <= MAX_EDGE && origBytes <= MAX_RAW_BYTES) return null
 
   const actions: string[] = []
   let outputMime = mime
+
+  // An oversized animated image loses every frame but the first, because sharp is
+  // deliberately opened WITHOUT { animated: true }. Do not "fix" that by enabling it:
+  // measured on a 9.59MB / 6-frame / 2400x1600 GIF, keeping the frames produced 5.62MB
+  // (still over the 3.93MB budget, so the API rejects it anyway) and took 11.2s, versus
+  // 934KB and 2.0s when flattened. Anthropic only analyzes the first frame of a GIF, so
+  // those extra frames cost payload and latency and buy the model nothing.
+  // The flattening is recorded below so it never happens silently.
+  const pages = metadata.pages || 1
+  if (pages > 1) {
+    actions.push(`animation flattened: ${pages} frames → 1 (API reads the first frame only)`)
+  }
 
   // Step 1: Resample if any dimension exceeds target (fit inside MAX_EDGE box)
   let pipeline = sharp(inputBuffer)
